@@ -1,81 +1,106 @@
 import os
 import argparse
+import re
 from docx import Document
 from docx.shared import Pt
 from docx.oxml.ns import qn
 
-def is_match_extension(filename, extensions):
-    return any(filename.lower().endswith('.' + ext.lower()) for ext in extensions)
-
-def normalize_paths(paths):
-    return [os.path.abspath(path) for path in paths]
-
-def collect_all_files(paths):
-    """
-    从路径列表中获取所有文件路径（文件或文件夹混合）
-    """
-    all_files = set()
-    for path in paths:
-        abs_path = os.path.abspath(path)
-        if os.path.isfile(abs_path):
-            all_files.add(abs_path)
-        elif os.path.isdir(abs_path):
-            for root, _, files in os.walk(abs_path):
-                for f in files:
-                    full_path = os.path.join(root, f)
-                    all_files.add(full_path)
-    return all_files
-
-def should_include(file_path, include_files, exclude_files, extensions):
-    # 路径是否在 include 允许的文件列表中
-    if file_path not in include_files:
+def is_comment_line(line, ext):
+    line = line.strip()
+    if not line:
         return False
-    # 路径是否被排除
-    if any(file_path.startswith(excluded) for excluded in exclude_files):
-        return False
-    # 是否匹配扩展名
-    return is_match_extension(file_path, extensions)
 
-def add_code_to_docx(doc, file_path):
-    try:
+    # 单行注释
+    if ext in ['go', 'js', 'ts', 'java', 'c', 'cpp']:
+        return line.startswith('//') or line.startswith('/*') or line.startswith('*') or line.startswith('*/')
+    elif ext in ['py', 'sh', 'yaml', 'yml']:
+        return line.startswith('#')
+    elif ext in ['html', 'xml']:
+        return '<!--' in line and '-->' in line
+    return False
+
+def remove_comments(content, ext):
+    # 简单处理多行注释
+    if ext in ['go', 'js', 'ts', 'java', 'c', 'cpp']:
+        content = re.sub(r'/\*[\s\S]*?\*/', '', content)
+    elif ext in ['html', 'xml']:
+        content = re.sub(r'<!--[\s\S]*?-->', '', content)
+
+    # 删除单行注释
+    lines = content.splitlines()
+    filtered = []
+    for line in lines:
+        if not is_comment_line(line, ext):
+            filtered.append(line)
+    return '\n'.join(filtered)
+
+def add_code_to_docx(doc, file_path, show_filename=True, keep_comments=True):
+    ext = file_path.split('.')[-1].lower()
+    if show_filename:
         doc.add_heading(file_path, level=2)
+
+    try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
-
-        para = doc.add_paragraph()
-        run = para.add_run(content)
-        run.font.name = 'Courier New'
-        run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Courier New')
-        run.font.size = Pt(10)
     except Exception as e:
-        print(f"⚠️ 无法读取文件 {file_path}: {e}")
+        print(f"Error reading file {file_path}: {e}")
+        return
+
+    if not keep_comments:
+        content = remove_comments(content, ext)
+
+    paragraph = doc.add_paragraph()
+    run = paragraph.add_run(content)
+    run.font.name = 'Courier New'
+    run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Courier New')
+    run.font.size = Pt(10)
+
+def collect_valid_files(include_paths, exclude_paths, allowed_exts):
+    included_files = []
+    exclude_paths = set(os.path.abspath(p) for p in exclude_paths)
+
+    for path in include_paths:
+        abs_path = os.path.abspath(path)
+        if os.path.isfile(abs_path):
+            if should_include(abs_path, exclude_paths, allowed_exts):
+                included_files.append(abs_path)
+        else:
+            for root, dirs, files in os.walk(abs_path):
+                if any(os.path.abspath(root).startswith(e) for e in exclude_paths):
+                    continue
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    if should_include(file_path, exclude_paths, allowed_exts):
+                        included_files.append(file_path)
+    return included_files
+
+def should_include(file_path, exclude_paths, allowed_exts):
+    if any(os.path.abspath(file_path).startswith(p) for p in exclude_paths):
+        return False
+    return file_path.lower().endswith(tuple('.' + ext.lower() for ext in allowed_exts))
 
 def main():
-    parser = argparse.ArgumentParser(description="导出指定源码文件到 Word 文档")
-    parser.add_argument('--include', nargs='+', required=True, help='要包含的文件或文件夹路径')
-    parser.add_argument('--exclude', nargs='*', default=[], help='要排除的文件或文件夹路径')
-    parser.add_argument('--ext', nargs='+', required=True, help='要包含的扩展名，例如：go html js css txt')
-    parser.add_argument('--output', default='code_export.docx', help='输出的 Word 文件名（默认：code_export.docx）')
+    parser = argparse.ArgumentParser(description="导出源码到 Word（.docx）文件")
+    parser.add_argument('--include', nargs='+', required=True, help='要包含的文件/文件夹路径')
+    parser.add_argument('--exclude', nargs='*', default=[], help='要排除的文件/文件夹路径')
+    parser.add_argument('--ext', nargs='+', required=True, help='要包含的文件扩展名，例如 go html js py')
+    parser.add_argument('--output', default='code_export.docx', help='输出文件名')
+    parser.add_argument('--show-filename', action='store_true', help='是否显示文件名')
+    parser.add_argument('--keep-comments', action='store_true', help='是否保留注释内容')
+
     args = parser.parse_args()
 
-    include_files = collect_all_files(args.include)
-    exclude_files = normalize_paths(args.exclude)
-    extensions = args.ext
-
-    print(f"✅ 发现 {len(include_files)} 个候选文件，正在筛选扩展名...")
-
-    final_files = [f for f in include_files if should_include(f, include_files, exclude_files, extensions)]
-
-    print(f"📦 最终导出文件数：{len(final_files)}")
+    files = collect_valid_files(args.include, args.exclude, args.ext)
+    print(f"将导出 {len(files)} 个文件到 {args.output}")
 
     doc = Document()
-    doc.add_heading('代码导出文档', level=1)
+    doc.add_heading('源码导出文档', level=1)
 
-    for file_path in sorted(final_files):
-        add_code_to_docx(doc, file_path)
+    for file_path in files:
+        add_code_to_docx(doc, file_path, show_filename=args.show_filename, keep_comments=args.keep_comments)
 
     doc.save(args.output)
-    print(f"✅ 导出完成：{args.output}")
+    print(f"导出成功: {args.output}")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
