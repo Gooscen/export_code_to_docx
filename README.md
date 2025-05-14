@@ -52,7 +52,7 @@ python export_code_to_docx.py \
   --output output_code.docx \                         # 导出为 output_code.docx 文件
   --show-filename \                                   # 显示每个文件的路径标题
   # 注释掉下一行等于默认删除注释，如果要保留注释就加上这行：
-  --keep-comments
+  --no-comments
 ```
 
 ```bash
