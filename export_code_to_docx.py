@@ -5,6 +5,13 @@ from docx import Document
 from docx.shared import Pt
 from docx.oxml.ns import qn
 
+# 默认支持的文件扩展名
+DEFAULT_EXTENSIONS = [
+    'py', 'js', 'ts', 'java', 'c', 'cpp', 'go', 
+    'html', 'css', 'xml', 'json', 'yaml', 'yml',
+    'sh', 'bash', 'sql', 'md', 'txt'
+]
+
 def is_comment_line(line, ext):
     line = line.strip()
     if not line:
@@ -80,13 +87,13 @@ def should_include(file_path, exclude_paths, allowed_exts):
     return file_path.lower().endswith(tuple('.' + ext.lower() for ext in allowed_exts))
 
 def main():
-    parser = argparse.ArgumentParser(description="导出源码到 Word（.docx）文件")
-    parser.add_argument('--include', nargs='+', required=True, help='要包含的文件/文件夹路径')
-    parser.add_argument('--exclude', nargs='*', default=[], help='要排除的文件/文件夹路径')
-    parser.add_argument('--ext', nargs='+', required=True, help='要包含的文件扩展名，例如 go html js py')
-    parser.add_argument('--output', default='code_export.docx', help='输出文件名')
-    parser.add_argument('--show-filename', action='store_true', help='是否显示文件名')
-    parser.add_argument('--keep-comments', action='store_true', help='是否保留注释内容')
+    parser = argparse.ArgumentParser(description="将源代码导出为Word文档(.docx)")
+    parser.add_argument('--include', nargs='+', required=True, help='要导出的文件或目录路径')
+    parser.add_argument('--exclude', nargs='*', default=[], help='要排除的文件或目录路径')
+    parser.add_argument('--ext', nargs='+', default=DEFAULT_EXTENSIONS, help=f'要包含的文件扩展名 (默认: {", ".join(DEFAULT_EXTENSIONS)})')
+    parser.add_argument('--output', default='code_export.docx', help='输出文件名 (默认: code_export.docx)')
+    parser.add_argument('--show-filename', action='store_true', default=False, help='是否显示文件名 (默认: 否)')
+    parser.add_argument('--no-comments', action='store_true', default=False, help='是否删除注释 (默认: 否)')
 
     args = parser.parse_args()
 
@@ -94,10 +101,10 @@ def main():
     print(f"将导出 {len(files)} 个文件到 {args.output}")
 
     doc = Document()
-    doc.add_heading('源码导出文档', level=1)
+    # doc.add_heading('源码导出文档', level=1)
 
     for file_path in files:
-        add_code_to_docx(doc, file_path, show_filename=args.show_filename, keep_comments=args.keep_comments)
+        add_code_to_docx(doc, file_path, show_filename=args.show_filename, keep_comments=not args.no_comments)
 
     doc.save(args.output)
     print(f"导出成功: {args.output}")

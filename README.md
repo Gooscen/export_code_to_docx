@@ -24,17 +24,26 @@ pip install python-docx
 ```
 
 ## 🚀 使用方式
+
 ```bash
 python export_code_to_docx.py \
   --include [包含的路径1 路径2 ...] \
-  --exclude [排除的路径1 路径2 ...] \
-  --ext [文件扩展名1 扩展名2 ...] \
-  --output [导出的.docx文件名] \
+  [--exclude [排除的路径1 路径2 ...]] \
+  [--ext [文件扩展名1 扩展名2 ...]] \
+  [--output 导出的文档名.docx] \
   [--show-filename] \
-  [--keep-comments]
+  [--no-comments]
 ```
 
-### ⭐️使用示例
+```bash
+# 简易版
+python export_code_to_docx.py --include <your_source_code_directory>
+```
+
+也可以通过`bash python export_code_to_docx.py --help`查看帮助
+
+### ⭐️ 使用示例
+
 ```bash
 python export_code_to_docx.py \
   --include backend frontend config.yaml \            # 包含这些文件和文件夹
@@ -44,4 +53,8 @@ python export_code_to_docx.py \
   --show-filename \                                   # 显示每个文件的路径标题
   # 注释掉下一行等于默认删除注释，如果要保留注释就加上这行：
   --keep-comments
-  ```
+```
+
+```bash
+python export_code_to_docx.py --include ./src
+```
